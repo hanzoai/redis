@@ -430,6 +430,7 @@ void loadServerConfigFromString(char *config) {
         {"list-max-ziplist-entries", 2, 2},
         {"list-max-ziplist-value", 2, 2},
         {"lua-replicate-commands", 2, 2},
+        {"io-threads-do-reads", 2, 2},
         {NULL, 0},
     };
     char buf[1024];
@@ -2547,11 +2548,10 @@ static int updateMaxclients(const char **err) {
         *err = msg;
         return 0;
     }
-    if ((unsigned int) aeGetSetSize(server.el) <
-        server.maxclients + CONFIG_FDSET_INCR)
-    {
-        if (aeResizeSetSize(server.el,
-            server.maxclients + CONFIG_FDSET_INCR) == AE_ERR)
+    size_t newsize = server.maxclients + CONFIG_FDSET_INCR;
+    if ((unsigned int) aeGetSetSize(server.el) < newsize) {
+        if (aeResizeSetSize(server.el, newsize) == AE_ERR ||
+            resizeAllIOThreadsEventLoops(newsize) == AE_ERR)
         {
             *err = "The event loop API used by Redis is not able to handle the specified number of clients";
             return 0;
@@ -3032,6 +3032,7 @@ static int applyClientMaxMemoryUsage(const char **err) {
     if (server.maxmemory_clients != 0)
         initServerClientMemUsageBuckets();
 
+    pauseAllIOThreads();
     /* When client eviction is enabled update memory buckets for all clients.
      * When disabled, clear that data structure. */
     listRewind(server.clients, &li);
@@ -3045,6 +3046,7 @@ static int applyClientMaxMemoryUsage(const char **err) {
             updateClientMemUsageAndBucket(c);
         }
     }
+    resumeAllIOThreads();
 
     if (server.maxmemory_clients == 0)
         freeServerClientMemUsageBuckets();

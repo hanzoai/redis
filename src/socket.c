@@ -115,7 +115,7 @@ static void connSocketShutdown(connection *conn) {
 /* Close the connection and free resources. */
 static void connSocketClose(connection *conn) {
     if (conn->fd != -1) {
-        aeDeleteFileEvent(conn->el, conn->fd, AE_READABLE | AE_WRITABLE);
+        if (conn->el) aeDeleteFileEvent(conn->el, conn->fd, AE_READABLE | AE_WRITABLE);
         close(conn->fd);
         conn->fd = -1;
     }
@@ -195,7 +195,7 @@ static int connSocketAccept(connection *conn, ConnectionCallbackFunc accept_hand
  * be installed in the current event loop, otherwise it will cause two event
  * loops to manage the same connection at the same time. */
 static int connSocketRebindEventLoop(connection *conn, aeEventLoop *el) {
-    serverAssert(!conn->read_handler && !conn->write_handler);
+    serverAssert(!conn->el && !conn->read_handler && !conn->write_handler);
     conn->el = el;
     return C_OK;
 }
@@ -407,6 +407,7 @@ static ConnectionType CT_Socket = {
     .accept = connSocketAccept,
 
     /* event loop */
+    .unbind_event_loop = NULL,
     .rebind_event_loop = connSocketRebindEventLoop,
 
     /* IO */
