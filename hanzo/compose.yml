@@ -1,0 +1,42 @@
+services:
+  redis:
+    image: redis/redis-stack:latest
+    container_name: hanzo-redis
+    ports:
+      - "6379:6379"   # Redis
+      - "8001:8001"   # RedisInsight
+    volumes:
+      - redis-data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    environment:
+      REDIS_ARGS: "--requirepass ${REDIS_PASSWORD:-hanzo_dev}"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-hanzo_dev}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command: >
+      redis-stack-server
+      --appendonly yes
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+
+  exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: hanzo-redis-exporter
+    ports:
+      - "9121:9121"
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-hanzo_dev}
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+
+networks:
+  default:
+    name: hanzo-memory
