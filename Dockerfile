@@ -1,6 +1,6 @@
 FROM --platform=$TARGETPLATFORM alpine:latest AS builder
 
-RUN apk add --no-cache gcc make musl-dev linux-headers
+RUN apk add --no-cache gcc g++ make musl-dev linux-headers
 
 WORKDIR /src
 COPY . /src
