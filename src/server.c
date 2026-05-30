@@ -83,6 +83,11 @@ double R_Zero, R_PosInf, R_NegInf, R_Nan;
 /* Global vars */
 struct redisServer server; /* Server global state */
 
+/* Snapshot of server.stat_total_client_process_input_buff_events used in
+ * beforeSleep() to detect event loop cycles where client input buffers
+ * were processed. */
+long long stat_prev_total_client_process_input_buff_events = 0;
+
 /*============================ Internal prototypes ========================== */
 
 static inline int isShutdownInitiated(void);
@@ -345,8 +350,13 @@ static void dictDestructorKV(dict *d, void *key) {
         meta->alloc_size -= alloc_size;
         /* kvstoreMeta may be NULL when freeing kvstore created with kvstoreBaseType
          * (e.g. in lazy free context). */
-        if (kvstoreMeta)
-            updateSlotHist(kvstoreMeta->allocsizes_hist, NULL, kv->type, alloc_size, -1);
+        if (kvstoreMeta && kv->type < OBJ_TYPE_BASIC_MAX) {
+            /* we don't call kvsUpdateHistogram() because it contains debugServerAssert
+             * that may fail in bg thread as kvstore might not being fully initialized */
+            int old_bin = (alloc_size == 0) ? 0 : log2ceil(alloc_size) + 1;
+            debugServerAssert(old_bin < MAX_KEYSIZES_BINS);
+            kvstoreMeta->allocsizes_hist[kv->type][old_bin]--;
+        }
     }
     decrRefCount(kv);
 }
@@ -535,11 +545,11 @@ static void kvstoreOnEmpty(kvstore *kvs) {
 
 static void kvstoreOnDictEmpty(kvstore *kvs, int didx) {
     kvstoreDictMetadata *meta = kvstoreGetDictMeta(kvs, didx, 0);
+    UNUSED(meta);
 #ifdef DEBUG_ASSERTIONS
     dictEmpty(kvstoreGetDict(kvs, didx), NULL);
 #endif
     debugServerAssert(meta->alloc_size == 0);
-    memset(&meta->keysizes_hist, 0, sizeof(meta->keysizes_hist));
 }
 
 /* Return 1 if currently we allow dict to expand. Dict may allocate huge
@@ -1532,6 +1542,10 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                                  current_time, factor);
         trackInstantaneousMetric(STATS_METRIC_EL_DURATION, server.duration_stats[EL_DURATION_TYPE_EL].sum,
                                  server.duration_stats[EL_DURATION_TYPE_EL].cnt, 1);
+
+        /* Periodic cleanup of active clients sliding window to clear stale slots
+         * when no client activity occurs for extended periods */
+        statsUpdateActiveClients(NULL);
     }
 
     /* We have just LRU_BITS bits per object for LRU information.
@@ -1994,6 +2008,17 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
         }
     }
 
+    /* Detect cycles with client input processing.
+     * Compare and refresh the snapshot here (not in afterSleep()) so IO-thread updates during aeApiPoll() are not missed.
+     * Run this before dispatching new IO-thread work. */
+    if (!ProcessingEventsWhileBlocked) {
+        long long total_client_process_input_buff_events;
+        atomicGet(server.stat_total_client_process_input_buff_events, total_client_process_input_buff_events);
+        if (stat_prev_total_client_process_input_buff_events != total_client_process_input_buff_events)
+            server.stat_eventloop_cycles_with_clients_input_buff_processing++;
+        stat_prev_total_client_process_input_buff_events = total_client_process_input_buff_events;
+    }
+
     /* Handle writes with pending output buffers. */
     handleClientsWithPendingWrites();
 
@@ -2305,11 +2330,9 @@ void initServerConfig(void) {
     server.executable = NULL;
     server.arch_bits = (sizeof(long) == 8) ? 64 : 32;
 #if DEBUG_ASSERT_KEYSPACE
-    server.dbg_assert_keysizes = 1;
-    server.dbg_assert_alloc_per_slot = 1;
+    server.dbg_assert_flags = DBG_ASSERT_KEYSIZES | DBG_ASSERT_ALLOC_SLOT;
 #else
-    server.dbg_assert_keysizes = 0;
-    server.dbg_assert_alloc_per_slot = 0;
+    server.dbg_assert_flags = 0;
 #endif
     server.bindaddr_count = CONFIG_DEFAULT_BINDADDR_COUNT;
     for (j = 0; j < CONFIG_DEFAULT_BINDADDR_COUNT; j++)
@@ -2851,8 +2874,16 @@ void resetServerStats(void) {
     server.stat_cluster_incompatible_ops = 0;
     server.stat_total_prefetch_batches = 0;
     server.stat_total_prefetch_entries = 0;
+    atomicSet(server.stat_avg_pipeline_length_sum, 0);
+    atomicSet(server.stat_avg_pipeline_length_cnt, 0);
+    atomicSet(server.stat_total_client_process_input_buff_events, 0);
+    server.stat_eventloop_cycles_with_clients_input_buff_processing = 0;
+    stat_prev_total_client_process_input_buff_events = 0;
     memset(server.duration_stats, 0, sizeof(durationStats) * EL_DURATION_TYPE_NUM);
     server.el_cmd_cnt_max = 0;
+    server.stat_slowlog_count = 0;
+    server.stat_slowlog_time_us_sum = 0;
+    server.stat_slowlog_time_us_max = 0;
     lazyfreeResetStats();
 }
 
@@ -3411,6 +3442,9 @@ void resetCommandTableStats(dict* commands) {
         c->calls = 0;
         c->rejected_calls = 0;
         c->failed_calls = 0;
+        c->slowlog_count = 0;
+        c->slowlog_time_us_sum = 0;
+        c->slowlog_time_us_max = 0;
         if(c->latency_histogram) {
             hdr_close(c->latency_histogram);
             c->latency_histogram = NULL;
@@ -3675,7 +3709,16 @@ void slowlogPushCurrentCommand(client *c, struct redisCommand *cmd, ustime_t dur
      * arguments. */
     robj **argv = c->original_argv ? c->original_argv : c->argv;
     int argc = c->original_argv ? c->original_argc : c->argc;
-    slowlogPushEntryIfNeeded(c,argv,argc,duration);
+    if (slowlogPushEntryIfNeeded(c,argv,argc,duration)) {
+        server.stat_slowlog_count++;
+        server.stat_slowlog_time_us_sum += duration;
+        if (duration > server.stat_slowlog_time_us_max)
+            server.stat_slowlog_time_us_max = duration;
+        cmd->slowlog_count++;
+        cmd->slowlog_time_us_sum += duration;
+        if (duration > cmd->slowlog_time_us_max)
+            cmd->slowlog_time_us_max = duration;
+    }
 }
 
 /* This function is called in order to update the total command histogram duration.
@@ -4169,13 +4212,9 @@ void afterCommand(client *c) {
     if (!server.execution_nesting)
         listJoin(c->reply, server.pending_push_messages);
 
-    /* Assert keysizes histogram if enabled */
-    if (unlikely(server.dbg_assert_keysizes))
-        dbgAssertKeysizesHist(c->db);
-
-    /* Assert per-slot alloc_size if enabled */
-    if (unlikely(server.dbg_assert_alloc_per_slot))
-        dbgAssertAllocSizePerSlot(c->db);
+    /* Run debug assertions if any are enabled */
+    if (unlikely(server.dbg_assert_flags))
+        dbgRunAssertions(c->db);
 }
 
 /* Check if c->cmd exists, fills `err` with details in case it doesn't.
@@ -5969,6 +6008,73 @@ const char *getSafeInfoString(const char *s, size_t len, char **tmp) {
                        sizeof(unsafe_info_chars)-1);
 }
 
+/* Active Clients Sliding Window
+ *
+ * Tracks unique clients with read activity in a sliding time window.
+ * Uses a circular buffer where each slot covers SLOT_DURATION_MS milliseconds.
+ * When a client becomes active, it increments the current slot and decrements
+ * its previous slot (if it was already active within the window).
+ * The total active count is the sum of all slots in the window.
+ *
+ * Slot duration and number of slots are constant powers of 2 to enable the compiler
+ * to optimize division and modulo operations into bit shifts and bitwise ANDs. */
+
+#define WINDOW_SLOTS 4
+#define SLOT_DURATION_MS_BITS 7
+#define SLOT_DURATION_MS (1LL << SLOT_DURATION_MS_BITS) /* 128ms per slot */
+#define WINDOW_DURATION_MS (WINDOW_SLOTS * SLOT_DURATION_MS) /* 512ms total */
+
+static_assert((WINDOW_SLOTS & (WINDOW_SLOTS - 1)) == 0, "WINDOW_SLOTS must be a power of 2");
+
+static int active_clients_window[WINDOW_SLOTS];
+static long long active_clients_window_ts = 0;
+
+void statsUpdateActiveClients(client *c) {
+    mstime_t now = server.mstime;
+    int current_slot = (now / SLOT_DURATION_MS) % WINDOW_SLOTS;
+    long long current_window_ts = (now / SLOT_DURATION_MS) * SLOT_DURATION_MS;
+
+    if (current_window_ts != active_clients_window_ts) {
+        /* Clear every slot crossed since the last update. Cap at one full
+         * window so large time gaps still clear each slot exactly once. */
+        long long slots_to_clear = (current_window_ts - active_clients_window_ts) / SLOT_DURATION_MS;
+        if (slots_to_clear > WINDOW_SLOTS) slots_to_clear = WINDOW_SLOTS;
+        int prev_slot = (active_clients_window_ts / SLOT_DURATION_MS) % WINDOW_SLOTS;
+        for (int i = 1; i <= (int)slots_to_clear; i++) {
+            active_clients_window[(prev_slot + i) % WINDOW_SLOTS] = 0;
+        }
+        active_clients_window_ts = current_window_ts;
+    }
+
+    /* Called periodically from serverCron() with c==NULL to clear stale slots
+     * when no client activity has occurred. */
+    if (!c)
+        return;
+
+    active_clients_window[current_slot]++;
+
+    /* If the client was already counted in the window, decrement its old slot
+     * so each client is counted at most once across the entire window.
+     * Use slot-aligned timestamps to match the granularity of window
+     * maintenance — otherwise a slot cleared by advancement may still
+     * appear "within the window" by exact-timestamp comparison. */
+    long long old_slot_boundary = (c->last_ts_when_counted_as_active / SLOT_DURATION_MS) * SLOT_DURATION_MS;
+    if (old_slot_boundary >= active_clients_window_ts - (WINDOW_SLOTS - 1) * SLOT_DURATION_MS) {
+        int old_slot = (c->last_ts_when_counted_as_active / SLOT_DURATION_MS) % WINDOW_SLOTS;
+        active_clients_window[old_slot]--;
+    }
+
+    c->last_ts_when_counted_as_active = now;
+}
+
+int getActiveClientsInWindow(void) {
+    int count = 0;
+    for (int i = 0; i < WINDOW_SLOTS; i++) {
+        count += active_clients_window[i];
+    }
+    return count;
+}
+
 sds genRedisInfoStringCommandStats(sds info, dict *commands) {
     struct redisCommand *c;
     dictEntry *de;
@@ -5978,12 +6084,24 @@ sds genRedisInfoStringCommandStats(sds info, dict *commands) {
         char *tmpsafe;
         c = (struct redisCommand *) dictGetVal(de);
         if (c->calls || c->failed_calls || c->rejected_calls) {
-            info = sdscatprintf(info,
-                "cmdstat_%s:calls=%lld,usec=%lld,usec_per_call=%.2f"
-                ",rejected_calls=%lld,failed_calls=%lld\r\n",
-                getSafeInfoString(c->fullname, sdslen(c->fullname), &tmpsafe), c->calls, c->microseconds,
-                (c->calls == 0) ? 0 : ((float)c->microseconds/c->calls),
-                c->rejected_calls, c->failed_calls);
+            if (c->slowlog_count > 0) {
+                info = sdscatprintf(info,
+                    "cmdstat_%s:calls=%lld,usec=%lld,usec_per_call=%.2f"
+                    ",rejected_calls=%lld,failed_calls=%lld"
+                    ",slowlog_count=%lld,slowlog_time_ms_sum=%.2f,slowlog_time_ms_max=%.2f\r\n",
+                    getSafeInfoString(c->fullname, sdslen(c->fullname), &tmpsafe), c->calls, c->microseconds,
+                    (c->calls == 0) ? 0 : ((float)c->microseconds/c->calls),
+                    c->rejected_calls, c->failed_calls,
+                    c->slowlog_count, (double)c->slowlog_time_us_sum / 1000,
+                    (double)c->slowlog_time_us_max / 1000);
+            } else {
+                info = sdscatprintf(info,
+                    "cmdstat_%s:calls=%lld,usec=%lld,usec_per_call=%.2f"
+                    ",rejected_calls=%lld,failed_calls=%lld\r\n",
+                    getSafeInfoString(c->fullname, sdslen(c->fullname), &tmpsafe), c->calls, c->microseconds,
+                    (c->calls == 0) ? 0 : ((float)c->microseconds/c->calls),
+                    c->rejected_calls, c->failed_calls);
+            }
             if (tmpsafe != NULL) zfree(tmpsafe);
         }
         if (c->subcommands_dict) {
@@ -6245,6 +6363,7 @@ sds genRedisInfoString(dict *section_dict, int all_sections, int everything) {
             "pubsub_clients:%d\r\n", server.pubsub_clients,
             "watching_clients:%d\r\n", server.watching_clients,
             "clients_in_timeout_table:%llu\r\n", (unsigned long long) raxSize(server.clients_timeout_table),
+            "active_clients:%d\r\n", getActiveClientsInWindow(),
             "total_watched_keys:%lu\r\n", watched_keys,
             "total_blocking_keys:%lu\r\n", blocking_keys,
             "total_blocking_keys_on_nokey:%lu\r\n", blocking_keys_on_nokey));
@@ -6468,6 +6587,9 @@ sds genRedisInfoString(dict *section_dict, int all_sections, int everything) {
     if (all_sections  || (dictFind(section_dict,"stats") != NULL)) {
         long long stat_net_input_bytes, stat_net_output_bytes;
         long long stat_net_repl_input_bytes, stat_net_repl_output_bytes;
+        long long stat_total_client_process_input_buff_events;
+        long long stat_avg_pipeline_length_sum;
+        long long stat_avg_pipeline_length_cnt;
         long long current_eviction_exceeded_time = server.stat_last_eviction_exceeded_time ?
             (long long) elapsedUs(server.stat_last_eviction_exceeded_time): 0;
         long long current_active_defrag_time = server.stat_last_active_defrag_time ?
@@ -6478,6 +6600,9 @@ sds genRedisInfoString(dict *section_dict, int all_sections, int everything) {
         atomicGet(server.stat_net_repl_input_bytes, stat_net_repl_input_bytes);
         atomicGet(server.stat_net_repl_output_bytes, stat_net_repl_output_bytes);
         atomicGet(server.stat_client_qbuf_limit_disconnections, stat_client_qbuf_limit_disconnections);
+        atomicGet(server.stat_total_client_process_input_buff_events, stat_total_client_process_input_buff_events);
+        atomicGet(server.stat_avg_pipeline_length_sum, stat_avg_pipeline_length_sum);
+        atomicGet(server.stat_avg_pipeline_length_cnt, stat_avg_pipeline_length_cnt);
 
         /* If we calculated the total reads and writes in the threads section,
          * we don't need to do it again, and also keep the values consistent. */
@@ -6557,7 +6682,15 @@ sds genRedisInfoString(dict *section_dict, int all_sections, int everything) {
             "eventloop_duration_sum:%llu\r\n", server.duration_stats[EL_DURATION_TYPE_EL].sum,
             "eventloop_duration_cmd_sum:%llu\r\n", server.duration_stats[EL_DURATION_TYPE_CMD].sum,
             "instantaneous_eventloop_cycles_per_sec:%llu\r\n", getInstantaneousMetric(STATS_METRIC_EL_CYCLE),
-            "instantaneous_eventloop_duration_usec:%llu\r\n", getInstantaneousMetric(STATS_METRIC_EL_DURATION)));
+            "instantaneous_eventloop_duration_usec:%llu\r\n", getInstantaneousMetric(STATS_METRIC_EL_DURATION),
+            "eventloop_cycles_with_clients_processing:%zu\r\n", server.stat_eventloop_cycles_with_clients_input_buff_processing,
+            "total_client_processing_events:%lld\r\n", stat_total_client_process_input_buff_events,
+            "avg_pipeline_length_sum:%lld\r\n", stat_avg_pipeline_length_sum,
+            "avg_pipeline_length_cnt:%lld\r\n", stat_avg_pipeline_length_cnt,
+            "avg_pipeline_length:%.2f\r\n", stat_avg_pipeline_length_cnt ? (double)stat_avg_pipeline_length_sum / stat_avg_pipeline_length_cnt : 0,
+            "slowlog_commands_count:%lld\r\n", server.stat_slowlog_count,
+            "slowlog_commands_time_ms_max:%.2f\r\n", (double)server.stat_slowlog_time_us_max / 1000,
+            "slowlog_commands_time_ms_sum:%.2f\r\n", (double)server.stat_slowlog_time_us_sum / 1000));
         info = genRedisInfoStringACLStats(info);
         if (!server.cluster_enabled && server.cluster_compatibility_sample_ratio) {
             info = sdscatprintf(info, "cluster_incompatible_ops:%lld\r\n", server.stat_cluster_incompatible_ops);
@@ -6726,16 +6859,18 @@ sds genRedisInfoString(dict *section_dict, int all_sections, int everything) {
     }
 
     /* Hotkeys */
-    if (server.hotkeys &&
-        (all_sections || (dictFind(section_dict,"hotkeys") != NULL)))
+    if (all_sections || (dictFind(section_dict,"hotkeys") != NULL))
     {
         if (sections++) info = sdscat(info,"\r\n"); 
 
-        info = sdscatprintf(info, "# Hotkeys\r\n"
-            "hotkeys-tracking-active:%d\r\n"
-            "hotkeys-cmd-cpu-time:%lld\r\n",
-            server.hotkeys->active ? 1 : 0,
-            server.hotkeys->cpu_time);
+        info = sdscatprintf(info, "# Hotkeys\r\n");
+        if (server.hotkeys) {
+            info = sdscatprintf(info,
+                "hotkeys-tracking-active:%d\r\n"
+                "hotkeys-cmd-cpu-time:%lld\r\n",
+                server.hotkeys->active ? 1 : 0,
+                server.hotkeys->cpu_time);
+        }
     }
 
     /* Modules */
