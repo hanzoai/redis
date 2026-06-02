@@ -321,6 +321,7 @@ void restoreCommand(client *c) {
     objectSetLRUOrLFU(kv, lfu_freq, lru_idle, lru_clock, 1000);
     keyModified(c,c->db,key,NULL,1);
     notifyKeyspaceEvent(NOTIFY_GENERIC,"restore",key,c->db->id);
+    KSN_INVALIDATE_KVOBJ(kv);
 
     /* If we deleted a key that means REPLACE parameter was passed and the
      * destination key existed. */
@@ -803,7 +804,12 @@ int verifyClusterNodeId(const char *name, int length) {
 }
 
 int isValidAuxChar(int c) {
-    return isalnum(c) || (strchr("!#$%&()*+:;<>?@[]^{|}~", c) == NULL);
+    /* Reject control characters (0x00-0x1F and 0x7F). */
+    if (iscntrl(c)) {
+        return 0;
+    }
+    /* Reject forbidden characters including nodes.conf delimiters and special parsing characters */
+    return isalnum(c) || (strchr("!#$%&()*+:;<>?@[]^{|}~,= \"'\\", c) == NULL);
 }
 
 int isValidAuxString(char *s, unsigned int length) {
@@ -1740,7 +1746,7 @@ unsigned int clusterDelKeysInSlot(unsigned int hashslot, int by_command) {
              * just moved to another node. The modules needs to know that these
              * keys are no longer available locally, so just send the keyspace
              * notification to the modules, but not to clients. */
-            moduleNotifyKeyspaceEvent(NOTIFY_GENERIC, "del", key, server.db[0].id);
+            moduleNotifyKeyspaceEvent(NOTIFY_GENERIC, "del", key, server.db[0].id, NULL, 0);
         }
         exitExecutionUnit();
         postExecutionUnitOperations();
@@ -2101,17 +2107,26 @@ int clusterCanAccessKeysInSlot(int slot) {
     return 0;
 }
 
-/* Return the slot ranges that belong to the current node or its master. */
+/* Return the slot ranges that belong to the current node or its master.
+ * In non-cluster mode, returns the full slot range (0-16383). */
 slotRangeArray *clusterGetLocalSlotRanges(void) {
-    slotRangeArray *slots = NULL;
-
     if (!server.cluster_enabled) {
-        slots = slotRangeArrayCreate(1);
+        slotRangeArray *slots = slotRangeArrayCreate(1);
         slotRangeArraySet(slots, 0, 0, CLUSTER_SLOTS - 1);
         return slots;
     }
 
-    clusterNode *master = clusterNodeGetMaster(getMyClusterNode());
+    return clusterGetNodeSlotRanges(getMyClusterNode());
+}
+
+/* Returns the slot ranges owned by the given node.
+ * If the node is a replica, the master's slot ranges are returned.
+ * Returns an empty array if the node has no slots. */
+slotRangeArray *clusterGetNodeSlotRanges(clusterNode *node) {
+    slotRangeArray *slots = NULL;
+
+    serverAssert(server.cluster_enabled && node != NULL);
+    clusterNode *master = clusterNodeGetMaster(node);
     if (master) {
         for (int i = 0; i < CLUSTER_SLOTS; i++) {
             if (clusterNodeCoversSlot(master, i))

@@ -472,7 +472,7 @@ static void cliLegacyIntegrateHelp(void) {
         if (entry->type != REDIS_REPLY_ARRAY || entry->elements < 4 ||
             entry->element[0]->type != REDIS_REPLY_STRING ||
             entry->element[1]->type != REDIS_REPLY_INTEGER ||
-            entry->element[3]->type != REDIS_REPLY_INTEGER) return;
+            entry->element[3]->type != REDIS_REPLY_INTEGER) break;
         char *cmdname = entry->element[0]->str;
         int i;
 
@@ -2735,8 +2735,10 @@ static int parseOptions(int argc, char **argv) {
         } else if ((!strcmp(argv[i],"-a") || !strcmp(argv[i],"--pass"))
                    && !lastarg)
         {
+            sdsfree(config.conn_info.auth);
             config.conn_info.auth = sdsnew(argv[++i]);
         } else if (!strcmp(argv[i],"--user") && !lastarg) {
+            sdsfree(config.conn_info.user);
             config.conn_info.user = sdsnew(argv[++i]);
         } else if (!strcmp(argv[i],"-u") && !lastarg) {
             parseRedisUri(argv[++i],"redis-cli",&config.conn_info,&config.tls);
@@ -6152,6 +6154,8 @@ static int clusterManagerFixSlotsCoverage(char *all_slots) {
                     fixed = -1;
                     if (reply) freeReplyObject(reply);
                     if (slot_nodes) listRelease(slot_nodes);
+                    sdsfree(slot_nodes_str);
+                    sdsfree(slot);
                     goto cleanup;
                 }
                 assert(reply->type == REDIS_REPLY_ARRAY);
