@@ -9,7 +9,7 @@ concurrency:
 jobs:
 
   test-ubuntu-latest:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     steps:
     - uses: actions/checkout@v6
     - name: make
@@ -28,7 +28,7 @@ jobs:
         if [[ ! -z  $dirty ]]; then echo $dirty; exit 1; fi
 
   test-sanitizer-address:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     steps:
       - uses: actions/checkout@v6
       - name: make
@@ -40,7 +40,7 @@ jobs:
         run: ./runtest --verbose --tags -slow --dump-logs
 
   build-debian-old:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     container: debian:buster
     steps:
     - uses: actions/checkout@v6
@@ -61,7 +61,7 @@ jobs:
       run: make REDIS_CFLAGS='-Werror' BUILD_TLS=yes
 
   build-32bit:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     steps:
     - uses: actions/checkout@v6
     - name: make
@@ -70,14 +70,14 @@ jobs:
         make REDIS_CFLAGS='-Werror' 32bit
 
   build-libc-malloc:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     steps:
     - uses: actions/checkout@v6
     - name: make
       run: make REDIS_CFLAGS='-Werror' MALLOC=libc
 
   build-centos-jemalloc:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     container: quay.io/centos/centos:stream9
     steps:
     - uses: actions/checkout@v6
@@ -87,7 +87,7 @@ jobs:
         make REDIS_CFLAGS='-Werror'
 
   build-old-chain-jemalloc:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     container: ubuntu:20.04
     steps:
     - uses: actions/checkout@v6
