@@ -32,7 +32,7 @@ on:
 jobs:
 
   test-ubuntu-jemalloc:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'ubuntu')
@@ -69,7 +69,7 @@ jobs:
       run: ./src/redis-server test all --accurate
 
   test-ubuntu-arm:
-    runs-on: ubuntu-24.04-arm
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'arm')
@@ -108,7 +108,7 @@ jobs:
         run: ./src/redis-server test all --accurate
 
   test-ubuntu-arm-libc-malloc:
-    runs-on: ubuntu-24.04-arm
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       (!contains(github.event.inputs.skipjobs, 'arm') || !contains(github.event.inputs.skipjobs, 'malloc'))
@@ -144,7 +144,7 @@ jobs:
         run: ./runtest-cluster ${{github.event.inputs.cluster_test_args}}
 
   test-ubuntu-arm-tls:
-    runs-on: ubuntu-24.04-arm
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       (!contains(github.event.inputs.skipjobs, 'arm') || !contains(github.event.inputs.skipjobs, 'tls'))
@@ -186,7 +186,7 @@ jobs:
   # - Cluster slot stats
   # Skips slow and defrag tests to avoid timeouts while maintaining good coverage.
   test-debug-assert-keyspace:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'assert-keyspace')
@@ -219,7 +219,7 @@ jobs:
       run: ./runtest-cluster ${{github.event.inputs.cluster_test_args}}
 
   test-ubuntu-jemalloc-fortify:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'fortify')
@@ -259,7 +259,7 @@ jobs:
       run: ./src/redis-server test all --accurate
 
   test-ubuntu-libc-malloc:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'malloc')
@@ -293,7 +293,7 @@ jobs:
       run: ./runtest-cluster ${{github.event.inputs.cluster_test_args}}
 
   test-ubuntu-no-malloc-usable-size:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'malloc')
@@ -327,7 +327,7 @@ jobs:
       run: ./runtest-cluster ${{github.event.inputs.cluster_test_args}}
 
   test-ubuntu-32bit:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, '32bit')
@@ -367,7 +367,7 @@ jobs:
       run: ./src/redis-server test all --accurate
 
   test-ubuntu-tls:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'tls')
@@ -407,7 +407,7 @@ jobs:
         ./runtest-cluster --tls ${{github.event.inputs.cluster_test_args}}
 
   test-ubuntu-tls-no-tls:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'tls')
@@ -447,7 +447,7 @@ jobs:
         ./runtest-cluster ${{github.event.inputs.cluster_test_args}}
 
   test-ubuntu-io-threads:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'iothreads')
@@ -479,7 +479,7 @@ jobs:
       run: ./runtest-cluster --config io-threads 4 ${{github.event.inputs.cluster_test_args}}
 
   test-ubuntu-reclaim-cache:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'specific')
@@ -557,7 +557,7 @@ jobs:
         if [ "$(( $CACHE-$CACHE0 ))" -gt "8000000" ]; then exit 1; fi
 
   test-valgrind-test:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'valgrind') && !contains(github.event.inputs.skiptests, 'redis')
@@ -590,7 +590,7 @@ jobs:
       run: ./runtest --valgrind --no-latency --verbose --clients 1 --timeout 2400 --tags -iothreads --dump-logs ${{github.event.inputs.test_args}}
 
   test-valgrind-misc:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'valgrind') && !(contains(github.event.inputs.skiptests, 'modules') && contains(github.event.inputs.skiptests, 'unittest'))
@@ -622,7 +622,7 @@ jobs:
         if grep -q 0x err.txt; then cat err.txt; exit 1; fi
 
   test-valgrind-no-malloc-usable-size-test:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'valgrind') && !contains(github.event.inputs.skiptests, 'redis')
@@ -652,7 +652,7 @@ jobs:
       run: ./runtest --valgrind --tags -iothreads --no-latency --verbose --clients 1 --timeout 2400 --dump-logs ${{github.event.inputs.test_args}}
 
   test-valgrind-no-malloc-usable-size-misc:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'valgrind') && !(contains(github.event.inputs.skiptests, 'modules') && contains(github.event.inputs.skiptests, 'unittest'))
@@ -684,7 +684,7 @@ jobs:
         if grep -q 0x err.txt; then cat err.txt; exit 1; fi
 
   test-sanitizer-address:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'sanitizer')
@@ -728,7 +728,7 @@ jobs:
         run: ./src/redis-server test all
 
   test-sanitizer-memory:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'sanitizer')
@@ -769,7 +769,7 @@ jobs:
         run: ./src/redis-server test all
 
   test-sanitizer-undefined:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'sanitizer')
@@ -813,7 +813,7 @@ jobs:
         run: ./src/redis-server test all --accurate
 
   test-sanitizer-thread:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'sanitizer')
@@ -857,7 +857,7 @@ jobs:
         run: ./runtest-cluster --config io-threads 2 ${{github.event.inputs.cluster_test_args}}
 
   test-centos-jemalloc:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'centos')
@@ -896,7 +896,7 @@ jobs:
       run: ./runtest-cluster ${{github.event.inputs.cluster_test_args}}
 
   test-centos-tls-module:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'tls')
@@ -939,7 +939,7 @@ jobs:
         ./runtest-cluster --tls-module ${{github.event.inputs.cluster_test_args}}
 
   test-centos-tls-module-no-tls:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'tls')
@@ -1089,7 +1089,7 @@ jobs:
       run: make REDIS_CFLAGS='-Werror -DREDIS_TEST'
 
   test-freebsd:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'freebsd')
@@ -1117,7 +1117,7 @@ jobs:
           ./runtest --single unit/keyspace --single unit/auth --single unit/networking --single unit/protocol
 
   test-alpine-jemalloc:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'alpine')
@@ -1153,7 +1153,7 @@ jobs:
       run: ./runtest-cluster ${{github.event.inputs.cluster_test_args}}
 
   test-alpine-libc-malloc:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'alpine')
@@ -1189,7 +1189,7 @@ jobs:
       run: ./runtest-cluster ${{github.event.inputs.cluster_test_args}}
 
   reply-schemas-validator:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     timeout-minutes: 360
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
@@ -1233,7 +1233,7 @@ jobs:
       run: ./utils/req-res-log-validator.py --verbose --fail-missing-reply-schemas ${{ (!contains(github.event.inputs.skiptests, 'redis') && !contains(github.event.inputs.skiptests, 'module') && !contains(github.event.inputs.sentinel, 'redis') && !contains(github.event.inputs.skiptests, 'cluster')) && github.event.inputs.test_args == '' && github.event.inputs.cluster_test_args == '' && '--fail-commands-not-all-hit' || '' }}
 
   test-old-chain-jemalloc:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'oldTC')
@@ -1278,7 +1278,7 @@ jobs:
       run: ./runtest-cluster ${{github.event.inputs.cluster_test_args}}
 
   test-old-chain-tls-module:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'tls') && !contains(github.event.inputs.skipjobs, 'oldTC')
@@ -1328,7 +1328,7 @@ jobs:
         ./runtest-cluster --tls-module ${{github.event.inputs.cluster_test_args}}
 
   test-old-chain-tls-module-no-tls:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'tls') && !contains(github.event.inputs.skipjobs, 'oldTC')
@@ -1378,7 +1378,7 @@ jobs:
         ./runtest-cluster ${{github.event.inputs.cluster_test_args}}
 
   test-sanitizer-force-defrag:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'defrag')
@@ -1406,7 +1406,7 @@ jobs:
       run: ./runtest --debug-defrag --verbose --clients 1 ${{github.event.inputs.test_args}}
 
   test-vectorset:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: |
       (github.event_name == 'workflow_dispatch' || (github.event_name != 'workflow_dispatch' && github.repository == 'redis/redis')) &&
       !contains(github.event.inputs.skipjobs, 'vectorset')
