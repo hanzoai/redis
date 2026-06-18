@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   test-external-standalone:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: github.event_name != 'schedule' || github.repository == 'redis/redis'
     timeout-minutes: 360
     steps:
@@ -37,7 +37,7 @@ jobs:
         path: external-redis.log
 
   test-external-cluster:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: github.event_name != 'schedule' || github.repository == 'redis/redis'
     timeout-minutes: 360
     steps:
@@ -65,7 +65,7 @@ jobs:
         path: external-redis-cluster.log
 
   test-external-nodebug:
-    runs-on: ubuntu-latest
+    runs-on: hanzo-build-linux-amd64
     if: github.event_name != 'schedule' || github.repository == 'redis/redis'
     timeout-minutes: 360
     steps:
