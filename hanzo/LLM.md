@@ -64,13 +64,6 @@ REDIS_PORT=6379
 REDIS_PASSWORD=hanzo_dev
 ```
 
-### With hanzo/iam (Casdoor fork)
-
-IAM uses for session storage:
-```env
-redisEndpoint=localhost:6379
-```
-
 ## Syncing with Upstream
 
 ```bash
@@ -162,6 +155,5 @@ redis.expire(session_key, ttl)
 
 - **hanzo/console** - AI observability (caching)
 - **hanzo/llm** - LLM Gateway (response cache)
-- **hanzo/iam** - Identity management (sessions)
 - **hanzo/datastore** - ClickHouse fork (OLAP)
 - **hanzo/relational** - PostgreSQL fork (OLTP)
