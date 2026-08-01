@@ -1,3 +1,9 @@
+> **Archived — this is not a Hanzo product.** It is an unmodified import of
+> [Redis](https://github.com/redis/redis), referenced by no Hanzo manifest. Hanzo stores
+> state in [Base](https://github.com/hanzoai/base) (SQLite), and in
+> [Hanzo KV](https://github.com/hanzoai/kv) where a key/value store is wanted. The
+> upstream README follows unchanged; for Redis itself, go to redis.io.
+
 [![codecov](https://codecov.io/github/redis/redis/graph/badge.svg?token=6bVHb5fRuz)](https://codecov.io/github/redis/redis)
 
 This document serves as both a quick start guide to Redis and a detailed resource for building it from source.
