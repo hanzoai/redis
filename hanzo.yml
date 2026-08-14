@@ -1,0 +1,6 @@
+test:
+  - name: build
+    run: |
+      set -e
+      make -j"$(nproc)" BUILD_TLS=no MALLOC=libc
+      src/redis-server --version
