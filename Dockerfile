@@ -1,4 +1,4 @@
-FROM --platform=$TARGETPLATFORM alpine:latest AS builder
+FROM --platform=$TARGETPLATFORM alpine:3.24 AS builder
 
 RUN apk add --no-cache gcc g++ make musl-dev linux-headers
 
@@ -7,7 +7,7 @@ COPY . /src
 
 RUN make -j$(nproc) BUILD_TLS=no MALLOC=libc
 
-FROM --platform=$TARGETPLATFORM alpine:latest
+FROM --platform=$TARGETPLATFORM alpine:3.24
 
 LABEL maintainer="dev@hanzo.ai"
 LABEL org.opencontainers.image.title="Hanzo Memory"
